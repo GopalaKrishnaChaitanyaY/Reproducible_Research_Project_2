@@ -1,0 +1,146 @@
+---
+title: "The Most Harmful Types of Weather Conditions in the U.S.  Between 1950 and 2011"
+output: html_document
+---
+
+## Synopsis
+It this report we aim to identify the most harmful types of dangerous weather conditions. Based on National Weather Service Storm Database we identified types of events most harmful to population health (in terms of numbers of fatalities and injuries) and separately most expensive for the economy (due to damages in property and in crops). Taking into account data for the period 1950 - 2011 we can concluded that tornados was the most harmful in terms of health as well in terms of economy. The second most dangerous events were thunderstorm winds (both for health and economy). Excessive heat (for health) and flash floods (for economy) are on the third position.
+
+## Data processing
+
+This analysis is based on National Weather Service Storm Database, which for
+the purposed of the project was downloaded from [Coursera Peer Assignment Project page][1].
+
+### Loading required packages
+To conduct the analysis, we need some packages to be loaded into R session. 
+```{r}
+library(dplyr)
+```
+### Loading data
+1. We're createing 'data' subdirectory (if it doesn't exist) and downloading data from url given on [coursera project page][2]
+```{r}
+if (!file.exists("./data")) {
+        dir.create("./data")
+}
+if (!file.exists("./data/Storm.csv.bz2")) {
+        download.file("http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", 
+              destfile = "./data/Storm.csv.bz2")
+}
+```
+2. We have to read data into R using connection bzfile and read.csv as the data is in csv format (compressed using bzip2 algorithm)
+```{r, cache = TRUE}
+connection <- bzfile("./data/Storm.csv.bz2")
+storms.raw <- read.csv(connection, stringsAsFactors = FALSE)
+```
+3. Getting general sense of data
+```{r, cache = TRUE}
+str(storms.raw)
+length(unique(storms.raw$EVTYPE))
+```
+
+
+### Subsetting and processing data
+As we can see, there are `r length(unique(storms.raw$EVTYPE))` event types recorded in the database. 
+In this case there are to goals of data preprocessing
+1. To Add to the data variables that sum up healh impact and economic impact of particular type of events
+2. To see if all event types (as recorded in EVTYPE column in the original data) are relevant for our analysis. We can group the records based on EVTYPE, sumaraise health and economic impact measures and check if how much of total health impact/ damages are cover by top ten event types (separately for health and economic issues. 
+This way we can try to limit the analysis to only a subset of event types. It should be sufficient for this stage of analysis to ensure time and cost efficieny of the project. Once it is decided that more in-depth study is required, we will be able to take into accounts every single event in the database. 
+
+We added  a column 'health.impact' that summrises number of fatalities and inujries (For the purpose of this analysis, let's assume that fatality and injury are equaly harmful for the population health)
+
+We added column 'economc.impact' that summarises property damages and crop damages. (For the purpose of this analysis, let's assume that both types of damages are equaly harmful for the economy). Please note that both quantities are expressed in monetary terms, are estimated by National Weather Service (NWS). Please consult [NWS Manual][3], especially pages 12-13 to get a sense of accuracy od those estimations.
+
+```{r, cache = TRUE}
+evtype.ranking <- storms.raw %>% group_by(EVTYPE) %>% 
+        summarize(count=n(),fatalities=sum(FATALITIES),inuries = sum(INJURIES), 
+                  prop.damages=sum(PROPDMG),crop.damages=sum(CROPDMG)) %>%
+        arrange(desc(count))
+evtype.ranking <- mutate(evtype.ranking, health.impact = fatalities + inuries,
+                         economic.impact = prop.damages + crop.damages)
+select(evtype.ranking,EVTYPE,count, health.impact, economic.impact)
+```
+
+#### The most harmful event types to population health
+Based on the above table, we can sort the events types and select the most harmful event types for population health.
+```{r, cache = TRUE}
+evtype.rank.health <- arrange(evtype.ranking,desc(health.impact))
+
+select(evtype.rank.health,EVTYPE, health.impact, fatalities, inuries)
+colSums(evtype.rank.health[1:10,-1])/colSums(evtype.ranking[,-1])
+```
+As we can see top 10 event types are responsible for **88%** of total fatalities and injuries. Therefore we assume that we can limit our analysis to this top 10 categories.
+
+Please note, that categories  TSTM WIND and THUNDERSTORM WIND are most likely the same (and differ only due to data input issues).  After taking this issue into account the tables looks as follow:
+```{r, cache = TRUE}
+evtype.rank.health$EVTYPE <- gsub("TSTM WIND","THUNDERSTORM WIND",evtype.rank.health$EVTYPE)
+evtype.rank.health$EVTYPE <- gsub("THUNDERSTORM WINDS","THUNDERSTORM WIND", 
+                                  evtype.rank.health$EVTYPE)
+
+evtype.rank.health <- evtype.rank.health %>% group_by(EVTYPE) %>% 
+        summarise(health.impact = sum(health.impact), 
+                  fatalities = sum(fatalities), inuries = sum(inuries)) %>%
+        arrange(desc(health.impact))
+evtype.rank.health[1:9,]
+colSums(evtype.rank.health[1:9,-1])/colSums(evtype.rank.health[,-1])
+```
+Other categories are probably correct as they appear in the [NWS list of key categories][3](pages 18 to 92).
+
+#### The event types with the greatest economic consequences
+```{r, cache = TRUE}
+evtype.rank.economic <- arrange(evtype.ranking,desc(economic.impact))
+
+select(evtype.rank.economic, EVTYPE, economic.impact, prop.damages, crop.damages)
+colSums(evtype.rank.economic[1:10,-1])/colSums(evtype.ranking[,-1])
+
+```
+
+
+As we can see top 10 event types are responsible for **91%** of total property and crop damages. Therefore we assume that we can limit our analysis to this top 10 categories.
+
+Please note, that categories  TSTM WIND and THUNDERSTORM WIND are most likely the same (and differ only due to data input issues).  After taking this issue into account the tables looks as follow:
+```{r, cache = TRUE}
+evtype.rank.economic$EVTYPE <- gsub("TSTM WIND","THUNDERSTORM WIND",evtype.rank.economic$EVTYPE)
+evtype.rank.economic$EVTYPE <- gsub("THUNDERSTORM WINDS","THUNDERSTORM WIND", 
+                                  evtype.rank.economic$EVTYPE)
+
+evtype.rank.economic <- evtype.rank.economic %>% group_by(EVTYPE) %>% 
+        summarise(economic.impact = sum(economic.impact), 
+                  prop.damages = sum(prop.damages), crop.damages = sum(crop.damages)) %>%
+        arrange(desc(economic.impact))
+evtype.rank.economic[1:9,]
+colSums(evtype.rank.economic[1:9,-1])/colSums(evtype.rank.economic[,-1])
+```
+Other categories are probably correct as they appear in the [NWS list of key categories][3](pages 18 to 92).
+
+## Results
+### The most harmful event types to population health
+
+```{r population_health_impact, fig.width= 10}
+
+par(mar=c(5,8,1,1))
+barplot(evtype.rank.health$health.impact[9:1], names.arg =evtype.rank.health$EVTYPE[9:1],cex.names = 0.7, xlab = "Total number of fatalities and injuries", main = "The most harmful event types to population health between 1950 and 2011", horiz = TRUE, las=1, col="red")
+```
+In terms of impact on population health, tornados were the most harmful events in the U.S between 1950 and 2011. They casued 9 times more fatalities and injuriers that the second most harmful type of events (thunderstorms). Tornados accounted for over 65% of injuries and 37% of fatalities caused by severe weather conditions. 
+
+```{r}
+colSums(evtype.rank.health[1,-1])/colSums(evtype.rank.health[,-1])
+```
+
+
+### The most harmful event types to economy
+
+```{r economic_impact, fig.width= 10}
+
+par(mar=c(5,8,1,1))
+barplot(evtype.rank.economic$economic.impact[9:1], names.arg =evtype.rank.economic$EVTYPE[9:1],cex.names = 0.7, xlab = "Total value of crop  and property damages (in currency terms)", main = "The most damaging event types to economy between 1950 and 2011", horiz = TRUE, las=1, col="blue")
+```
+In terms of economic consequences, tornados were the most harmful events in the U.S between 1950 and 2011. Tornados accounted for over 27% of total economic damages (especially property damages) caused by severe weather conditions.
+
+```{r}
+colSums(evtype.rank.economic[1,-1])/colSums(evtype.rank.economic[,-1])
+```
+
+
+[2]: https://class.coursera.org/repdata-012/human_grading/view/courses/973513/assessments/4/submissions
+[1]: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
+[3]: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf

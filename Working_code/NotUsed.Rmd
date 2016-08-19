@@ -1,0 +1,3 @@
+It is the only piece of code where we don't want to present results of code executing. (Loading some packages generates long list of messages, concering e.g. object masking etc.)
+
+
